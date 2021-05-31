@@ -18,7 +18,6 @@ Device::Device(const Napi::CallbackInfo & info) : Napi::ObjectWrap<Device>(info)
 {
 	device = info[0].As<Napi::External<libusb_device>>().Data();
 	libusb_ref_device(device);
-	byPtr.insert(std::make_pair(device, this));
 #ifndef USE_POLL
 	completionQueue.start(info.Env());
 #endif
@@ -31,24 +30,15 @@ Device::~Device(){
 #ifndef USE_POLL
 	completionQueue.stop();
 #endif
-	byPtr.erase(device);
 	libusb_close(device_handle);
 	libusb_unref_device(device);
 }
 
-// Map pinning each libusb_device to a particular V8 instance
-std::map<libusb_device*, Device*> Device::byPtr;
-
 // Get a V8 instance for a libusb_device: either the existing one from the map,
 // or create a new one and add it to the map.
 Napi::Object Device::get(napi_env env, libusb_device* dev){
-	auto it = byPtr.find(dev);
-	if (it != byPtr.end()){
-		return it->second->Value();
-	} else {
-		Napi::Object obj = Device::constructor.New({ Napi::External<libusb_device>::New(env, dev) });
-		return obj;
-	}
+	Napi::Object obj = Device::constructor.New({ Napi::External<libusb_device>::New(env, dev) });
+	return obj;
 }
 
 Napi::Value Device::Constructor(const Napi::CallbackInfo& info) {
