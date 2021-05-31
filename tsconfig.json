@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "allowSyntheticDefaultImports": true,
+        "moduleResolution": "node",
+        "target": "es6",
+        "module": "commonjs",
+        "esModuleInterop": true,
+        "outDir": "dist",
+        "alwaysStrict": true,
+        "noEmitOnError": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "sourceMap": true,
+        "declaration": true,
+        "skipLibCheck": true
+    }
+}

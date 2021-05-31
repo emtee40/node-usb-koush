@@ -29,7 +29,7 @@
       "name": "Christopher Klein"
     }
   ],
-  "main": "./usb",
+  "main": "./dist",
   "repository": {
     "type": "git",
     "url": "https://github.com/tessel/node-usb.git"
@@ -37,6 +37,7 @@
   "scripts": {
     "install": "prebuild-install --runtime napi --target 4 --verbose || node-gyp rebuild",
     "prebuild": "prebuild --runtime napi --target 4 --force --strip --verbose",
+    "build": "rm -rf dist && tsc",
     "test": "mocha --require coffeescript/register --grep Module test/*",
     "full-test": "mocha --require coffeescript/register test/*",
     "valgrind": "coffee -c test/usb.coffee; valgrind --leak-check=full --show-possibly-lost=no node --expose-gc --trace-gc node_modules/mocha/bin/_mocha -R spec"
