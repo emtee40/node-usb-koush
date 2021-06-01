@@ -2,7 +2,6 @@ import { once, EventEmitter } from "events";
 
 import {
 	CapabilityDescriptor,
-	LibUSBException,
 	Device,
 	Endpoint as EndpointType,
 	OutEndpoint as OutEndpointType,
@@ -119,7 +118,7 @@ class DeviceExtensions {
 		}
 	}
 
-	getStringDescriptor(desc_index: number): Promise<string> {
+	async getStringDescriptor(desc_index: number): Promise<string> {
 		var langid = 0x0409;
 		var length = 255;
 		return new Promise((resolve, reject) => {
@@ -225,7 +224,7 @@ class DeviceExtensions {
 		return capabilities;
 	}
 
-	setConfiguration(desired: number): Promise<void> {
+	async setConfiguration(desired: number): Promise<void> {
 		return new Promise((resolve, reject) => {
 			var self = this as any;
 			self.__setConfiguration(desired, function (err) {
@@ -239,8 +238,8 @@ class DeviceExtensions {
 			});
 		});
 	}
-	
-	reset(): Promise<void> {
+
+	async reset(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			const self = this as any;
 			self.__reset(function (err) {
@@ -349,10 +348,9 @@ class Interface implements InterfaceType {
 		this.device.__claimInterface(this.id)
 	}
 
-	release(closeEndpoints?: boolean): Promise<void> {
-		var self = this;
-
+	async release(closeEndpoints?: boolean): Promise<void> {
 		return new Promise((resolve, reject) => {
+			var self = this;
 
 			if (!closeEndpoints || this.endpoints.length == 0) {
 				next();
@@ -394,7 +392,7 @@ class Interface implements InterfaceType {
 		return this.device.__attachKernelDriver(this.id)
 	};
 
-	setAltSetting(altSetting): Promise<void> {
+	async setAltSetting(altSetting): Promise<void> {
 		return new Promise((resolve, reject) => {
 			var self = this;
 			(this.device as any).__setInterface(this.id, altSetting, function (err) {
@@ -451,7 +449,7 @@ class Endpoint extends EventEmitter implements EndpointType {
 		this.transferType = descriptor.bmAttributes & 0x03
 	}
 
-	clearHalt(): Promise<void> {
+	async clearHalt(): Promise<void> {
 		return new Promise((resolve, reject) => {
 			(this.device as any).__clearHalt(this.address, (err) => {
 				if (err) return reject(err);
@@ -505,20 +503,15 @@ class InEndpoint extends Endpoint implements InEndpointType {
 	}
 
 
-	transfer(length: number, callback: (error: undefined | LibUSBException, data?: Buffer) => void): InEndpointType {
-		var self = this
+	async transfer(length: number): Promise<Buffer> {
 		var buffer = Buffer.alloc(length)
 
-		function cb(error: any, _buf: any, actual: number) {
-			callback.call(self, error, buffer.slice(0, actual))
-		}
-
-		try {
-			this.makeTransfer(this.timeout, cb).submit(buffer)
-		} catch (e) {
-			process.nextTick(function () { callback.call(self, e); });
-		}
-		return this;
+		return new Promise((resolve, reject) => {
+			this.makeTransfer(this.timeout, (error: any, _buf: any, actual: number) => {
+				if (error) return reject(error);
+				resolve(buffer.subarray(0, actual));
+			}).submit(buffer)
+		})
 	}
 
 	startPoll(nTransfers?: number, transferSize?: number) {
@@ -566,36 +559,30 @@ class OutEndpoint extends Endpoint implements OutEndpointType {
 		super(device, descriptor)
 	}
 
-	transfer(buffer, cb?) {
-		var self = this
+	async transfer(buffer: Buffer): Promise<void> {
 		if (!buffer) {
 			buffer = Buffer.alloc(0)
 		} else if (!isBuffer(buffer)) {
 			buffer = Buffer.from(buffer)
 		}
 
-		function callback(error, _buf?, _actual?) {
-			if (cb) cb.call(self, error)
-		}
+		return new Promise((resolve, reject) => {
+			this.makeTransfer(this.timeout, (error, _buf?, _actual?) => {
+				if (error) return reject(error);
+				resolve(null);
 
-		try {
-			this.makeTransfer(this.timeout, callback).submit(buffer);
-		} catch (e) {
-			process.nextTick(function () { callback(e); });
-		}
-
-		return this;
+			}).submit(buffer);
+		})
 	}
 
-	transferWithZLP(buf, cb) {
+	async transferWithZLP(buf: Buffer) {
 		if (buf.length % this.descriptor.wMaxPacketSize == 0) {
-			this.transfer(buf);
-			this.transfer(Buffer.alloc(0), cb);
+			await this.transfer(buf);
+			await this.transfer(Buffer.alloc(0));
 		} else {
-			this.transfer(buf, cb);
+			await this.transfer(buf);
 		}
 	}
-
 }
 
 var hotplugListeners = 0;

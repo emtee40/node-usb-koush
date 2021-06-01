@@ -397,7 +397,7 @@ export interface Device {
      * @param length
      * @param callback
      */
-    transfer(length: number, callback: (error: undefined | LibUSBException, data?: Buffer) => void): InEndpoint;
+    transfer(length: number): Promise<Buffer>;
   
     /**
      * Start polling the endpoint.
@@ -440,8 +440,8 @@ export interface Device {
      * @param buffer
      * @param callback
      */
-    transfer(buffer: Buffer, callback: (error: undefined | LibUSBException) => void): OutEndpoint;
-    transferWithZLP(buffer: Buffer, callback: (error: undefined | LibUSBException) => void): void;
+    transfer(buffer: Buffer): Promise<void>;
+    transferWithZLP(buffer: Buffer): Promise<void>;
   }
   
   /** A structure representing the standard USB endpoint descriptor */
