@@ -86,7 +86,7 @@ export interface Device {
      * @param desc_index
      * @param callback
      */
-    getStringDescriptor(desc_index: number, callback: (error: undefined | LibUSBException, data?: string) => void): void;
+     getStringDescriptor(desc_index: number): Promise<string>;
   
     /**
      * Perform a control transfer to retrieve an object with properties for the fields of the Binary Object Store descriptor.

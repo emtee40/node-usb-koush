@@ -1,4 +1,4 @@
-import events, { EventEmitter } from "events";
+import { EventEmitter } from "events";
 
 import {
 	CapabilityDescriptor,
@@ -9,7 +9,8 @@ import {
 	InEndpoint as InEndpointType,
 	EndpointDescriptor, Transfer,
 	Interface as InterfaceType,
-	InterfaceDescriptor
+	InterfaceDescriptor,
+	ConfigDescriptor
 } from "./types";
 
 const usb = require("bindings")("usb_bindings")
@@ -40,8 +41,8 @@ if (usb.INIT_ERROR) {
 	usb._disableHotplugEvents = function () { };
 }
 
-Object.keys(events.EventEmitter.prototype).forEach(function (key) {
-	usb[key] = events.EventEmitter.prototype[key];
+Object.keys(EventEmitter.prototype).forEach(function (key) {
+	usb[key] = EventEmitter.prototype[key];
 });
 
 // convenience method for finding a device by vendor and product id
@@ -56,64 +57,98 @@ export function findByIds(vid, pid) {
 	}
 }
 
-usb.Device.prototype.timeout = 1000
+class DeviceExtensions {
+	interfaces: Interface[];
 
-usb.Device.prototype.open = function (defaultConfig) {
-	this.__open()
-	if (defaultConfig === false) return
-	this.interfaces = []
-	var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
-	for (var i = 0; i < len; i++) {
-		this.interfaces[i] = new Interface(this, i)
+	get parent(): Device {
+		const self = this as any;
+		return self._parent || (self._parent = self.__getParent())
 	}
-}
 
-usb.Device.prototype.close = function () {
-	this.__close()
-	this.interfaces = null
-}
-
-Object.defineProperty(usb.Device.prototype, "configDescriptor", {
-	get: function () {
+	get configDescriptor(): ConfigDescriptor {
 		try {
-			return this._configDescriptor || (this._configDescriptor = this.__getConfigDescriptor())
+			const self = this as any;
+			return self._configDescriptor || (self._configDescriptor = self.__getConfigDescriptor())
 		} catch (e) {
 			// Check descriptor exists
 			if (e.errno == usb.LIBUSB_ERROR_NOT_FOUND) return null;
 			throw e;
 		}
 	}
-});
 
-Object.defineProperty(usb.Device.prototype, "allConfigDescriptors", {
-	get: function () {
+	get allConfigDescriptors(): ConfigDescriptor[] {
 		try {
-			return this._allConfigDescriptors || (this._allConfigDescriptors = this.__getAllConfigDescriptors())
+			const self = this as any;
+			return self._allConfigDescriptors || (self._allConfigDescriptors = self.__getAllConfigDescriptors())
 		} catch (e) {
 			// Check descriptors exist
 			if (e.errno == usb.LIBUSB_ERROR_NOT_FOUND) return [];
 			throw e;
 		}
 	}
-});
 
-Object.defineProperty(usb.Device.prototype, "parent", {
-	get: function () {
-		return this._parent || (this._parent = this.__getParent())
+	close() {
+		const self = this as any;
+		self.__close()
+		self.interfaces = null
 	}
-});
 
-usb.Device.prototype.interface = function (addr) {
-	if (!this.interfaces) {
-		throw new Error("Device must be open before searching for interfaces")
-	}
-	addr = addr || 0
-	for (var i = 0; i < this.interfaces.length; i++) {
-		if (this.interfaces[i].interfaceNumber == addr) {
-			return this.interfaces[i]
+	open() {
+		const self = this as any;
+		self.__open()
+		this.interfaces = []
+		var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
+		for (var i = 0; i < len; i++) {
+			this.interfaces[i] = new Interface(this, i)
 		}
 	}
+
+	interface(addr: number) {
+		if (!this.interfaces) {
+			throw new Error("Device must be open before searching for interfaces")
+		}
+		addr = addr || 0
+		for (var i = 0; i < this.interfaces.length; i++) {
+			if (this.interfaces[i].interfaceNumber == addr) {
+				return this.interfaces[i]
+			}
+		}
+	}
+
+	getStringDescriptor(desc_index: number): Promise<string> {
+		var langid = 0x0409;
+		var length = 255;
+		return new Promise((resolve, reject) => {
+			const self = this as any;
+			self.controlTransfer(
+				usb.LIBUSB_ENDPOINT_IN,
+				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
+				((usb.LIBUSB_DT_STRING << 8) | desc_index),
+				langid,
+				length,
+				function (error, buf) {
+					if (error) return reject(error);
+					resolve(buf.toString('utf16le', 2));
+				}
+			);
+
+		})
+	}
 }
+
+Object.getOwnPropertyNames(DeviceExtensions.prototype).filter(key => key !== 'constructor').forEach(key => {
+	const d = Object.getOwnPropertyDescriptor(DeviceExtensions.prototype, key);
+	if (d.get) {
+		Object.defineProperty(usb.Device.prototype, key, {
+			get: d.get,
+		});
+	}
+	else {
+		usb.Device.prototype[key] = d.value;
+	}
+});
+
+usb.Device.prototype.timeout = 1000;
 
 var SETUP_SIZE = usb.LIBUSB_CONTROL_SETUP_SIZE
 
@@ -170,21 +205,6 @@ usb.Device.prototype.controlTransfer =
 		return this;
 	}
 
-usb.Device.prototype.getStringDescriptor = function (desc_index, callback) {
-	var langid = 0x0409;
-	var length = 255;
-	this.controlTransfer(
-		usb.LIBUSB_ENDPOINT_IN,
-		usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
-		((usb.LIBUSB_DT_STRING << 8) | desc_index),
-		langid,
-		length,
-		function (error, buf) {
-			if (error) return callback(error);
-			callback(undefined, buf.toString('utf16le', 2));
-		}
-	);
-}
 
 usb.Device.prototype.getBosDescriptor = function (callback) {
 
