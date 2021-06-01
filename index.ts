@@ -1,4 +1,4 @@
-import { EventEmitter } from "events";
+import { once, EventEmitter } from "events";
 
 import {
 	CapabilityDescriptor,
@@ -481,7 +481,7 @@ class Endpoint extends EventEmitter implements EndpointType {
 		return transfers;
 	}
 
-	stopPoll(cb?) {
+	async stopPoll(): Promise<void> {
 		if (!this.pollTransfers) {
 			throw new Error('Polling is not active.');
 		}
@@ -493,9 +493,8 @@ class Endpoint extends EventEmitter implements EndpointType {
 			}
 		}
 		this.pollActive = false
-		if (cb) this.once('end', cb);
+		await once(this, 'end');
 	}
-
 }
 
 class InEndpoint extends Endpoint implements InEndpointType {

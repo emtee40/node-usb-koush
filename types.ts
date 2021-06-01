@@ -385,7 +385,6 @@ export interface Device {
     transferType: number;
     timeout: number;
     descriptor: EndpointDescriptor;
-    makeTransfer(timeout: number, callback: (error: undefined | LibUSBException, buffer?: Buffer, actualLength?: number) => void): Transfer;
     
     /**
      * Perform a transfer to read data from the endpoint.
@@ -420,7 +419,7 @@ export interface Device {
      * The device must be open to use this method.
      * @param callback
      */
-    stopPoll(callback?: () => void): void;
+    stopPoll(): Promise<void>;
   }
   
   /** Endpoints in the OUT direction (PC->device) have this type. */
@@ -429,7 +428,6 @@ export interface Device {
     transferType: number;
     timeout: number;
     descriptor: EndpointDescriptor;
-    makeTransfer(timeout: number, callback: (error: undefined | LibUSBException, buffer?: Buffer, actualLength?: number) => void): Transfer;
     
     /**
      * Perform a transfer to write `data` to the endpoint.
