@@ -76,8 +76,7 @@ export interface Device {
      * @param data_or_length
      * @param callback
      */
-    controlTransfer(bmRequestType: number, bRequest: number, wValue: number, wIndex: number, data_or_length: number | Buffer,
-                    callback: (error: undefined | LibUSBException, buffer?: Buffer) => void): Device;
+    controlTransfer(bmRequestType: number, bRequest: number, wValue: number, wIndex: number, data_or_length: number | Buffer): Promise<Buffer|undefined>;
   
     /**
      * Perform a control transfer to retrieve a string descriptor

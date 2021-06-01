@@ -59,6 +59,7 @@ export function findByIds(vid, pid) {
 }
 
 class DeviceExtensions {
+	timeout: number;
 	interfaces: Interface[];
 	_bosDescriptor: BosDescriptor;
 	deviceDescriptor: DeviceDescriptor;
@@ -121,21 +122,13 @@ class DeviceExtensions {
 	async getStringDescriptor(desc_index: number): Promise<string> {
 		var langid = 0x0409;
 		var length = 255;
-		return new Promise((resolve, reject) => {
-			const self = this as any;
-			self.controlTransfer(
-				usb.LIBUSB_ENDPOINT_IN,
-				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
-				((usb.LIBUSB_DT_STRING << 8) | desc_index),
-				langid,
-				length,
-				function (error, buf) {
-					if (error) return reject(error);
-					resolve(buf.toString('utf16le', 2));
-				}
-			);
-
-		})
+		const buf = await this.controlTransfer(
+			usb.LIBUSB_ENDPOINT_IN,
+			usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
+			((usb.LIBUSB_DT_STRING << 8) | desc_index),
+			langid,
+			length);
+		return buf.toString('utf16le', 2);
 	}
 
 
@@ -150,66 +143,53 @@ class DeviceExtensions {
 			// BOS is only supported from USB 2.0.1
 			return null;
 		}
-
-		const self = this as any;
-		return new Promise((resolve, reject) => {
-			self.controlTransfer(
+		try {
+			let buffer = await this.controlTransfer(
 				usb.LIBUSB_ENDPOINT_IN,
 				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
 				(usb.LIBUSB_DT_BOS << 8),
 				0,
-				usb.LIBUSB_DT_BOS_SIZE,
-				function (error, buffer) {
-					if (error) {
-						// Check BOS descriptor exists
-						if (error.errno === usb.LIBUSB_TRANSFER_STALL) return resolve(null);
-						return reject(error);
-					}
+				usb.LIBUSB_DT_BOS_SIZE);
 
-					var totalLength = buffer.readUInt16LE(2);
-					this.controlTransfer(
-						usb.LIBUSB_ENDPOINT_IN,
-						usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
-						(usb.LIBUSB_DT_BOS << 8),
-						0,
-						totalLength,
-						function (error, buffer) {
-							if (error) {
-								// Check BOS descriptor exists
-								if (error.errno == usb.LIBUSB_TRANSFER_STALL) return resolve(null);
-								return reject(error);
-							}
+			var totalLength = buffer.readUInt16LE(2);
+			buffer = await this.controlTransfer(
+				usb.LIBUSB_ENDPOINT_IN,
+				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
+				(usb.LIBUSB_DT_BOS << 8),
+				0,
+				totalLength);
 
-							var descriptor = {
-								bLength: buffer.readUInt8(0),
-								bDescriptorType: buffer.readUInt8(1),
-								wTotalLength: buffer.readUInt16LE(2),
-								bNumDeviceCaps: buffer.readUInt8(4),
-								capabilities: []
-							};
+			var descriptor = {
+				bLength: buffer.readUInt8(0),
+				bDescriptorType: buffer.readUInt8(1),
+				wTotalLength: buffer.readUInt16LE(2),
+				bNumDeviceCaps: buffer.readUInt8(4),
+				capabilities: []
+			};
 
-							var i = usb.LIBUSB_DT_BOS_SIZE;
-							while (i < descriptor.wTotalLength) {
-								const bLength = buffer.readUInt8(i + 0);
-								var capability = {
-									bLength,
-									bDescriptorType: buffer.readUInt8(i + 1),
-									bDevCapabilityType: buffer.readUInt8(i + 2),
-									dev_capability_data: buffer.slice(i + 3, i + bLength)
-								};
+			var i = usb.LIBUSB_DT_BOS_SIZE;
+			while (i < descriptor.wTotalLength) {
+				const bLength = buffer.readUInt8(i + 0);
+				var capability = {
+					bLength,
+					bDescriptorType: buffer.readUInt8(i + 1),
+					bDevCapabilityType: buffer.readUInt8(i + 2),
+					dev_capability_data: buffer.slice(i + 3, i + bLength)
+				};
 
-								descriptor.capabilities.push(capability);
-								i += capability.bLength;
-							}
+				descriptor.capabilities.push(capability);
+				i += capability.bLength;
+			}
 
-							// Cache descriptor
-							this._bosDescriptor = descriptor;
-							resolve(this._bosDescriptor);
-						}
-					);
-				}
-			);
-		})
+			// Cache descriptor
+			this._bosDescriptor = descriptor;
+			return this._bosDescriptor;
+		}
+		catch (error) {
+			// Check BOS descriptor exists
+			if (error.errno === usb.LIBUSB_TRANSFER_STALL) return null;
+			throw error;
+		}
 	}
 
 	async getCapabilities(): Promise<Capability[]> {
@@ -248,6 +228,53 @@ class DeviceExtensions {
 			});
 		})
 	}
+
+
+	async controlTransfer(bmRequestType: number, bRequest: number, wValue: number, wIndex: number, data_or_length: number | Buffer): Promise<Buffer | undefined> {
+		var isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
+		var wLength: number
+
+		if (isIn) {
+			if (!(data_or_length >= 0)) {
+				throw new TypeError("Expected size number for IN transfer (based on bmRequestType)")
+			}
+			wLength = data_or_length as number
+		} else {
+			if (!isBuffer(data_or_length)) {
+				throw new TypeError("Expected buffer for OUT transfer (based on bmRequestType)")
+			}
+			wLength = (data_or_length as Buffer).length
+		}
+
+		// Buffer for the setup packet
+		// http://libusbx.sourceforge.net/api-1.0/structlibusb__control__setup.html
+		var buf = Buffer.alloc(wLength + SETUP_SIZE)
+		buf.writeUInt8(bmRequestType, 0)
+		buf.writeUInt8(bRequest, 1)
+		buf.writeUInt16LE(wValue, 2)
+		buf.writeUInt16LE(wIndex, 4)
+		buf.writeUInt16LE(wLength, 6)
+
+		if (!isIn) {
+			buf.set(data_or_length as Buffer, SETUP_SIZE)
+		}
+
+		return new Promise((resolve, reject) => {
+			var transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
+				(error, buf, actual) => {
+					if (error) return reject(error);
+
+					if (isIn) {
+						resolve(buf.slice(SETUP_SIZE, SETUP_SIZE + actual));
+					} else {
+						resolve(null);
+					}
+				}
+			);
+
+			transfer.submit(buf)
+		})
+	}
 }
 
 Object.getOwnPropertyNames(DeviceExtensions.prototype).filter(key => key !== 'constructor').forEach(key => {
@@ -265,58 +292,6 @@ Object.getOwnPropertyNames(DeviceExtensions.prototype).filter(key => key !== 'co
 usb.Device.prototype.timeout = 1000;
 
 var SETUP_SIZE = usb.LIBUSB_CONTROL_SETUP_SIZE
-
-usb.Device.prototype.controlTransfer = function (bmRequestType, bRequest, wValue, wIndex, data_or_length, callback) {
-	var self = this
-	var isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
-	var wLength
-
-	if (isIn) {
-		if (!(data_or_length >= 0)) {
-			throw new TypeError("Expected size number for IN transfer (based on bmRequestType)")
-		}
-		wLength = data_or_length
-	} else {
-		if (!isBuffer(data_or_length)) {
-			throw new TypeError("Expected buffer for OUT transfer (based on bmRequestType)")
-		}
-		wLength = data_or_length.length
-	}
-
-	// Buffer for the setup packet
-	// http://libusbx.sourceforge.net/api-1.0/structlibusb__control__setup.html
-	var buf = Buffer.alloc(wLength + SETUP_SIZE)
-	buf.writeUInt8(bmRequestType, 0)
-	buf.writeUInt8(bRequest, 1)
-	buf.writeUInt16LE(wValue, 2)
-	buf.writeUInt16LE(wIndex, 4)
-	buf.writeUInt16LE(wLength, 6)
-
-	if (!isIn) {
-		buf.set(data_or_length, SETUP_SIZE)
-	}
-
-	var transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
-		function (error, buf, actual) {
-			if (callback) {
-				if (isIn) {
-					callback.call(self, error, buf.slice(SETUP_SIZE, SETUP_SIZE + actual))
-				} else {
-					callback.call(self, error)
-				}
-			}
-		}
-	)
-
-	try {
-		transfer.submit(buf)
-	} catch (e) {
-		if (callback) {
-			process.nextTick(function () { callback.call(self, e); });
-		}
-	}
-	return this;
-}
 
 class Interface implements InterfaceType {
 	device: Device;
