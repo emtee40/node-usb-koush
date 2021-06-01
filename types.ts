@@ -114,7 +114,6 @@ export interface Device {
      * Performs a reset of the device. Callback is called when complete.
      *
      * The device must be open to use this method.
-     * @param callback
      */
     reset(): Promise<void>;
   }
@@ -391,11 +390,8 @@ export interface Device {
      *
      * If length is greater than maxPacketSize, libusb will automatically split the transfer in multiple packets, and you will receive one callback with all data once all packets are complete.
      *
-     * `this` in the callback is the InEndpoint object.
-     *
      * The device must be open to use this method.
      * @param length
-     * @param callback
      */
     transfer(length: number): Promise<Buffer>;
   
@@ -417,7 +413,6 @@ export interface Device {
      * Further data may still be received. The `end` event is emitted and the callback is called once all transfers have completed or canceled.
      *
      * The device must be open to use this method.
-     * @param callback
      */
     stopPoll(): Promise<void>;
   }
@@ -434,11 +429,8 @@ export interface Device {
      *
      * If length is greater than maxPacketSize, libusb will automatically split the transfer in multiple packets, and you will receive one callback once all packets are complete.
      *
-     * `this` in the callback is the OutEndpoint object.
-     *
      * The device must be open to use this method.
      * @param buffer
-     * @param callback
      */
     transfer(buffer: Buffer): Promise<void>;
     transferWithZLP(buffer: Buffer): Promise<void>;
