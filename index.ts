@@ -451,8 +451,13 @@ class Endpoint extends EventEmitter implements EndpointType {
 		this.transferType = descriptor.bmAttributes & 0x03
 	}
 
-	clearHalt(callback) {
-		return (this.device as any).__clearHalt(this.address, callback);
+	clearHalt(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			(this.device as any).__clearHalt(this.address, (err) => {
+				if (err) return reject(err);
+				resolve(null);
+			});
+		});
 	}
 
 	makeTransfer(timeout, callback) {

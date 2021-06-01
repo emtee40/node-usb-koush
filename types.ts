@@ -365,7 +365,7 @@ export interface Device {
     descriptor: EndpointDescriptor;
   
     /** Clear the halt/stall condition for this endpoint. */
-    clearHalt(callback: (error: undefined | LibUSBException) => void): void;
+    clearHalt(): Promise<void>
   
     /**
      * Create a new `Transfer` object for this endpoint.
@@ -385,7 +385,6 @@ export interface Device {
     transferType: number;
     timeout: number;
     descriptor: EndpointDescriptor;
-    clearHalt(callback: (error: undefined | LibUSBException) => void): void;
     makeTransfer(timeout: number, callback: (error: undefined | LibUSBException, buffer?: Buffer, actualLength?: number) => void): Transfer;
     
     /**
@@ -430,7 +429,6 @@ export interface Device {
     transferType: number;
     timeout: number;
     descriptor: EndpointDescriptor;
-    clearHalt(callback: (error: undefined | LibUSBException) => void): void;
     makeTransfer(timeout: number, callback: (error: undefined | LibUSBException, buffer?: Buffer, actualLength?: number) => void): Transfer;
     
     /**
