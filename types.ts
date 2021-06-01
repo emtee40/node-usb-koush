@@ -102,7 +102,7 @@ export interface Device {
      * The device must be open to use this method.
      * @param callback
      */
-    getCapabilities(callback: (error: undefined | LibUSBException, capabilities?: Capability[]) => void): void;
+    getCapabilities(): Promise<Capability[]>;
   
     /**
      * Set the device configuration to something other than the default (0). To use this, first call `.open(false)` (which tells it not to auto configure),
@@ -112,7 +112,7 @@ export interface Device {
      * @param desired
      * @param callback
      */
-    setConfiguration(desired: number, callback: (error: undefined | LibUSBException) => void): void;
+    setConfiguration(desired: number): Promise<void>;
   
     /**
      * Performs a reset of the device. Callback is called when complete.

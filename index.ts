@@ -211,9 +211,7 @@ class DeviceExtensions {
 				}
 			);
 		})
-
 	}
-
 
 	async getCapabilities(): Promise<Capability[]> {
 		var capabilities = [];
@@ -225,6 +223,22 @@ class DeviceExtensions {
 			capabilities.push(new Capability(self, i))
 		}
 		return capabilities;
+	}
+
+
+	setConfiguration(desired: number): Promise<void> {
+		return new Promise((resolve, reject) => {
+			var self = this as any;
+			self.__setConfiguration(desired, function (err) {
+				if (err) return reject(err);
+				this.interfaces = []
+				var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
+				for (var i = 0; i < len; i++) {
+					this.interfaces[i] = new Interface(this, i)
+				}
+				resolve(null)
+			});
+		});
 	}
 }
 
@@ -244,73 +258,56 @@ usb.Device.prototype.timeout = 1000;
 
 var SETUP_SIZE = usb.LIBUSB_CONTROL_SETUP_SIZE
 
-usb.Device.prototype.controlTransfer =
-	function (bmRequestType, bRequest, wValue, wIndex, data_or_length, callback) {
-		var self = this
-		var isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
-		var wLength
+usb.Device.prototype.controlTransfer = function (bmRequestType, bRequest, wValue, wIndex, data_or_length, callback) {
+	var self = this
+	var isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
+	var wLength
 
-		if (isIn) {
-			if (!(data_or_length >= 0)) {
-				throw new TypeError("Expected size number for IN transfer (based on bmRequestType)")
-			}
-			wLength = data_or_length
-		} else {
-			if (!isBuffer(data_or_length)) {
-				throw new TypeError("Expected buffer for OUT transfer (based on bmRequestType)")
-			}
-			wLength = data_or_length.length
+	if (isIn) {
+		if (!(data_or_length >= 0)) {
+			throw new TypeError("Expected size number for IN transfer (based on bmRequestType)")
 		}
-
-		// Buffer for the setup packet
-		// http://libusbx.sourceforge.net/api-1.0/structlibusb__control__setup.html
-		var buf = Buffer.alloc(wLength + SETUP_SIZE)
-		buf.writeUInt8(bmRequestType, 0)
-		buf.writeUInt8(bRequest, 1)
-		buf.writeUInt16LE(wValue, 2)
-		buf.writeUInt16LE(wIndex, 4)
-		buf.writeUInt16LE(wLength, 6)
-
-		if (!isIn) {
-			buf.set(data_or_length, SETUP_SIZE)
+		wLength = data_or_length
+	} else {
+		if (!isBuffer(data_or_length)) {
+			throw new TypeError("Expected buffer for OUT transfer (based on bmRequestType)")
 		}
-
-		var transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
-			function (error, buf, actual) {
-				if (callback) {
-					if (isIn) {
-						callback.call(self, error, buf.slice(SETUP_SIZE, SETUP_SIZE + actual))
-					} else {
-						callback.call(self, error)
-					}
-				}
-			}
-		)
-
-		try {
-			transfer.submit(buf)
-		} catch (e) {
-			if (callback) {
-				process.nextTick(function () { callback.call(self, e); });
-			}
-		}
-		return this;
+		wLength = data_or_length.length
 	}
 
+	// Buffer for the setup packet
+	// http://libusbx.sourceforge.net/api-1.0/structlibusb__control__setup.html
+	var buf = Buffer.alloc(wLength + SETUP_SIZE)
+	buf.writeUInt8(bmRequestType, 0)
+	buf.writeUInt8(bRequest, 1)
+	buf.writeUInt16LE(wValue, 2)
+	buf.writeUInt16LE(wIndex, 4)
+	buf.writeUInt16LE(wLength, 6)
 
+	if (!isIn) {
+		buf.set(data_or_length, SETUP_SIZE)
+	}
 
-usb.Device.prototype.setConfiguration = function (desired, cb) {
-	var self = this;
-	this.__setConfiguration(desired, function (err) {
-		if (!err) {
-			this.interfaces = []
-			var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
-			for (var i = 0; i < len; i++) {
-				this.interfaces[i] = new Interface(this, i)
+	var transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
+		function (error, buf, actual) {
+			if (callback) {
+				if (isIn) {
+					callback.call(self, error, buf.slice(SETUP_SIZE, SETUP_SIZE + actual))
+				} else {
+					callback.call(self, error)
+				}
 			}
 		}
-		cb.call(self, err)
-	});
+	)
+
+	try {
+		transfer.submit(buf)
+	} catch (e) {
+		if (callback) {
+			process.nextTick(function () { callback.call(self, e); });
+		}
+	}
+	return this;
 }
 
 class Interface implements InterfaceType {
