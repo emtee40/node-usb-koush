@@ -127,7 +127,7 @@ class DeviceExtensions {
 			length);
 		const ret = buf.toString('utf16le', 2);
         const termination = ret.indexOf('\0');
-        if (termination)
+        if (termination !== -1)
             return ret.substring(0, termination);
         return ret;
 	}
