@@ -125,7 +125,11 @@ class DeviceExtensions {
 			((usb.LIBUSB_DT_STRING << 8) | desc_index),
 			langid,
 			length);
-		return buf.toString('utf16le', 2);
+		const ret = buf.toString('utf16le', 2);
+        const termination = ret.indexOf('\0');
+        if (termination)
+            return ret.substring(0, termination);
+        return ret;
 	}
 
 	async getBosDescriptor(): Promise<BosDescriptor> {

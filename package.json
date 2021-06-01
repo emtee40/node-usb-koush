@@ -29,8 +29,8 @@
       "name": "Christopher Klein"
     }
   ],
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/usb.js",
+  "types": "dist/usb.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/tessel/node-usb.git"
