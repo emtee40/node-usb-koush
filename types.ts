@@ -270,16 +270,6 @@ export interface Device {
     /**
      * Releases the interface and resets the alternate setting. Calls callback when complete.
      *
-     * It is an error to release an interface with pending transfers.
-     *
-     * The device must be open to use this method.
-     * @param callback
-     */
-    release(callback?: (error: undefined | LibUSBException) => void): void;
-  
-    /**
-     * Releases the interface and resets the alternate setting. Calls callback when complete.
-     *
      * It is an error to release an interface with pending transfers. If the optional closeEndpoints
      * parameter is true, any active endpoint streams are stopped (see `Endpoint.stopStream`),
      * and the interface is released after the stream transfers are cancelled. Transfers submitted
@@ -289,7 +279,7 @@ export interface Device {
      * @param closeEndpoints
      * @param callback
      */
-    release(closeEndpoints?: boolean, callback?: (error: undefined | LibUSBException) => void): void;
+    release(closeEndpoints?: boolean): Promise<void>;
   
     /**
      * Returns `false` if a kernel driver is not active; `true` if active.
@@ -319,7 +309,7 @@ export interface Device {
      * @param altSetting
      * @param callback
      */
-    setAltSetting(altSetting: number, callback: (error: undefined | LibUSBException) => void): void;
+    setAltSetting(altSetting: number): Promise<void>;
   
     /**
      * Return the InEndpoint or OutEndpoint with the specified address.

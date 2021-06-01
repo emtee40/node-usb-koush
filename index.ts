@@ -103,7 +103,7 @@ class DeviceExtensions {
 		this.interfaces = []
 		var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
 		for (var i = 0; i < len; i++) {
-			this.interfaces[i] = new Interface(this, i)
+			this.interfaces[i] = new Interface(this as any as Device, i)
 		}
 	}
 
@@ -318,7 +318,7 @@ class Interface implements InterfaceType {
 	interfaceNumber: number;
 	endpoints: Endpoint[];
 
-	constructor(device, id) {
+	constructor(device: Device, id: number) {
 		this.device = device
 		this.id = id
 		this.__refresh()
@@ -340,38 +340,37 @@ class Interface implements InterfaceType {
 		this.device.__claimInterface(this.id)
 	}
 
-	release(closeEndpoints, cb?) {
+	release(closeEndpoints?: boolean): Promise<void> {
 		var self = this;
-		if (typeof closeEndpoints == 'function') {
-			cb = closeEndpoints;
-			closeEndpoints = null;
-		}
 
-		if (!closeEndpoints || this.endpoints.length == 0) {
-			next();
-		} else {
-			var n = self.endpoints.length;
-			self.endpoints.forEach(function (ep, _i) {
-				if (ep.pollActive) {
-					ep.once('end', function () {
+		return new Promise((resolve, reject) => {
+
+			if (!closeEndpoints || this.endpoints.length == 0) {
+				next();
+			} else {
+				var n = self.endpoints.length;
+				self.endpoints.forEach(function (ep, _i) {
+					if (ep.pollActive) {
+						ep.once('end', function () {
+							if (--n == 0) next();
+						});
+						ep.stopPoll();
+					} else {
 						if (--n == 0) next();
-					});
-					ep.stopPoll();
-				} else {
-					if (--n == 0) next();
-				}
-			});
-		}
+					}
+				});
+			}
 
-		function next() {
-			(self.device as any).__releaseInterface(self.id, function (err) {
-				if (!err) {
+			function next() {
+				(self.device as any).__releaseInterface(self.id, function (err) {
+					if (err) return reject(err);
 					self.altSetting = 0;
 					self.__refresh()
-				}
-				cb.call(self, err)
-			})
-		}
+					resolve(null)
+				})
+			}
+		})
+
 	}
 
 	isKernelDriverActive() {
@@ -386,19 +385,19 @@ class Interface implements InterfaceType {
 		return this.device.__attachKernelDriver(this.id)
 	};
 
-
-	setAltSetting(altSetting, cb) {
-		var self = this;
-		(this.device as any).__setInterface(this.id, altSetting, function (err) {
-			if (!err) {
+	setAltSetting(altSetting): Promise<void> {
+		return new Promise((resolve, reject) => {
+			var self = this;
+			(this.device as any).__setInterface(this.id, altSetting, function (err) {
+				if (err) return reject(err);
 				self.altSetting = altSetting;
 				self.__refresh();
-			}
-			cb.call(self, err)
-		})
+				resolve(null);
+			})
+		});
 	}
 
-	endpoint = function (addr) {
+	endpoint(addr: number) {
 		for (var i = 0; i < this.endpoints.length; i++) {
 			if (this.endpoints[i].address == addr) {
 				return this.endpoints[i]
