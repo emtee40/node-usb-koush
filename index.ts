@@ -10,7 +10,9 @@ import {
 	EndpointDescriptor, Transfer,
 	Interface as InterfaceType,
 	InterfaceDescriptor,
-	ConfigDescriptor
+	ConfigDescriptor,
+	BosDescriptor,
+	DeviceDescriptor
 } from "./types";
 
 const usb = require("bindings")("usb_bindings")
@@ -59,6 +61,8 @@ export function findByIds(vid, pid) {
 
 class DeviceExtensions {
 	interfaces: Interface[];
+	_bosDescriptor: BosDescriptor;
+	deviceDescriptor: DeviceDescriptor;
 
 	get parent(): Device {
 		const self = this as any;
@@ -134,6 +138,94 @@ class DeviceExtensions {
 
 		})
 	}
+
+
+	async getBosDescriptor(): Promise<BosDescriptor> {
+
+		if (this._bosDescriptor) {
+			// Cached descriptor
+			return this._bosDescriptor;
+		}
+
+		if (this.deviceDescriptor.bcdUSB < 0x201) {
+			// BOS is only supported from USB 2.0.1
+			return null;
+		}
+
+		const self = this as any;
+		return new Promise((resolve, reject) => {
+			self.controlTransfer(
+				usb.LIBUSB_ENDPOINT_IN,
+				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
+				(usb.LIBUSB_DT_BOS << 8),
+				0,
+				usb.LIBUSB_DT_BOS_SIZE,
+				function (error, buffer) {
+					if (error) {
+						// Check BOS descriptor exists
+						if (error.errno === usb.LIBUSB_TRANSFER_STALL) return resolve(null);
+						return reject(error);
+					}
+
+					var totalLength = buffer.readUInt16LE(2);
+					this.controlTransfer(
+						usb.LIBUSB_ENDPOINT_IN,
+						usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
+						(usb.LIBUSB_DT_BOS << 8),
+						0,
+						totalLength,
+						function (error, buffer) {
+							if (error) {
+								// Check BOS descriptor exists
+								if (error.errno == usb.LIBUSB_TRANSFER_STALL) return resolve(null);
+								return reject(error);
+							}
+
+							var descriptor = {
+								bLength: buffer.readUInt8(0),
+								bDescriptorType: buffer.readUInt8(1),
+								wTotalLength: buffer.readUInt16LE(2),
+								bNumDeviceCaps: buffer.readUInt8(4),
+								capabilities: []
+							};
+
+							var i = usb.LIBUSB_DT_BOS_SIZE;
+							while (i < descriptor.wTotalLength) {
+								const bLength = buffer.readUInt8(i + 0);
+								var capability = {
+									bLength,
+									bDescriptorType: buffer.readUInt8(i + 1),
+									bDevCapabilityType: buffer.readUInt8(i + 2),
+									dev_capability_data: buffer.slice(i + 3, i + bLength)
+								};
+
+								descriptor.capabilities.push(capability);
+								i += capability.bLength;
+							}
+
+							// Cache descriptor
+							this._bosDescriptor = descriptor;
+							resolve(this._bosDescriptor);
+						}
+					);
+				}
+			);
+		})
+
+	}
+
+
+	async getCapabilities(): Promise<Capability[]> {
+		var capabilities = [];
+		var self = this;
+
+		const descriptor = await this.getBosDescriptor()
+		var len = descriptor ? descriptor.capabilities.length : 0
+		for (var i = 0; i < len; i++) {
+			capabilities.push(new Capability(self, i))
+		}
+		return capabilities;
+	}
 }
 
 Object.getOwnPropertyNames(DeviceExtensions.prototype).filter(key => key !== 'constructor').forEach(key => {
@@ -206,91 +298,6 @@ usb.Device.prototype.controlTransfer =
 	}
 
 
-usb.Device.prototype.getBosDescriptor = function (callback) {
-
-	if (this._bosDescriptor) {
-		// Cached descriptor
-		return callback(undefined, this._bosDescriptor);
-	}
-
-	if (this.deviceDescriptor.bcdUSB < 0x201) {
-		// BOS is only supported from USB 2.0.1
-		return callback(undefined, null);
-	}
-
-	this.controlTransfer(
-		usb.LIBUSB_ENDPOINT_IN,
-		usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
-		(usb.LIBUSB_DT_BOS << 8),
-		0,
-		usb.LIBUSB_DT_BOS_SIZE,
-		function (error, buffer) {
-			if (error) {
-				// Check BOS descriptor exists
-				if (error.errno == usb.LIBUSB_TRANSFER_STALL) return callback(undefined, null);
-				return callback(error, null);
-			}
-
-			var totalLength = buffer.readUInt16LE(2);
-			this.controlTransfer(
-				usb.LIBUSB_ENDPOINT_IN,
-				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
-				(usb.LIBUSB_DT_BOS << 8),
-				0,
-				totalLength,
-				function (error, buffer) {
-					if (error) {
-						// Check BOS descriptor exists
-						if (error.errno == usb.LIBUSB_TRANSFER_STALL) return callback(undefined, null);
-						return callback(error, null);
-					}
-
-					var descriptor = {
-						bLength: buffer.readUInt8(0),
-						bDescriptorType: buffer.readUInt8(1),
-						wTotalLength: buffer.readUInt16LE(2),
-						bNumDeviceCaps: buffer.readUInt8(4),
-						capabilities: []
-					};
-
-					var i = usb.LIBUSB_DT_BOS_SIZE;
-					while (i < descriptor.wTotalLength) {
-						const bLength = buffer.readUInt8(i + 0);
-						var capability = {
-							bLength,
-							bDescriptorType: buffer.readUInt8(i + 1),
-							bDevCapabilityType: buffer.readUInt8(i + 2),
-							dev_capability_data: buffer.slice(i + 3, i + bLength)
-						};
-
-						descriptor.capabilities.push(capability);
-						i += capability.bLength;
-					}
-
-					// Cache descriptor
-					this._bosDescriptor = descriptor;
-					callback(undefined, this._bosDescriptor);
-				}
-			);
-		}
-	);
-}
-
-usb.Device.prototype.getCapabilities = function (callback) {
-	var capabilities = [];
-	var self = this;
-
-	this.getBosDescriptor(function (error, descriptor) {
-		if (error) return callback(error, null);
-
-		var len = descriptor ? descriptor.capabilities.length : 0
-		for (var i = 0; i < len; i++) {
-			capabilities.push(new Capability(self, i))
-		}
-
-		callback(undefined, capabilities);
-	});
-}
 
 usb.Device.prototype.setConfiguration = function (desired, cb) {
 	var self = this;

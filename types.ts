@@ -94,7 +94,7 @@ export interface Device {
      * The device must be open to use this method.
      * @param callback
      */
-    getBosDescriptor(callback: (error: undefined | LibUSBException, descriptor?: BosDescriptor) => void): void;
+    getBosDescriptor(): Promise<BosDescriptor>;
   
     /**
      * Retrieve a list of Capability objects for the Binary Object Store capabilities of the device.
