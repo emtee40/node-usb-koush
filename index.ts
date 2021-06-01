@@ -14,23 +14,11 @@ import {
 	DeviceDescriptor
 } from "./types";
 
-const usb = require("bindings")("usb_bindings")
-
 export { Constants } from "./constants";
-export default usb;
 export * from "./types";
 
-/**
- * Return a list of `Device` objects for the USB devices attached to the system.
- */
-export function getDeviceList(): Device[] {
-	return usb.getDeviceList();
-}
-
-
-function isBuffer(obj: any) {
-	return obj && obj instanceof Uint8Array
-}
+const usb = require("bindings")("usb_bindings")
+export default usb as EventEmitter;
 
 if (usb.INIT_ERROR) {
 	console.warn("Failed to initialize libusb.")
@@ -42,22 +30,31 @@ if (usb.INIT_ERROR) {
 	usb._disableHotplugEvents = function () { };
 }
 
+// mixin EventEmitter for hotplug events.
 Object.keys(EventEmitter.prototype).forEach(function (key) {
 	usb[key] = EventEmitter.prototype[key];
 });
 
-// convenience method for finding a device by vendor and product id
-export function findByIds(vid, pid) {
-	var devices = usb.getDeviceList()
-
-	for (var i = 0; i < devices.length; i++) {
-		var deviceDesc = devices[i].deviceDescriptor
-		if ((deviceDesc.idVendor == vid) && (deviceDesc.idProduct == pid)) {
-			return devices[i]
-		}
+let hotplugListeners = 0;
+usb.on('newListener', function (name) {
+	if (name !== 'attach' && name !== 'detach') return;
+	if (++hotplugListeners === 1) {
+		usb._enableHotplugEvents();
 	}
-}
+});
 
+usb.on('removeListener', function (name) {
+	if (name !== 'attach' && name !== 'detach') return;
+	if (--hotplugListeners === 0) {
+		usb._disableHotplugEvents();
+	}
+});
+
+usb.Device.prototype.timeout = 1000;
+
+const SETUP_SIZE = usb.LIBUSB_CONTROL_SETUP_SIZE
+
+// Extensions on the NAPI Device class
 class DeviceExtensions {
 	timeout: number;
 	interfaces: Interface[];
@@ -101,8 +98,8 @@ class DeviceExtensions {
 		const self = this as any;
 		self.__open()
 		this.interfaces = []
-		var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
-		for (var i = 0; i < len; i++) {
+		const len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
+		for (let i = 0; i < len; i++) {
 			this.interfaces[i] = new Interface(this as any as Device, i)
 		}
 	}
@@ -112,7 +109,7 @@ class DeviceExtensions {
 			throw new Error("Device must be open before searching for interfaces")
 		}
 		addr = addr || 0
-		for (var i = 0; i < this.interfaces.length; i++) {
+		for (let i = 0; i < this.interfaces.length; i++) {
 			if (this.interfaces[i].interfaceNumber == addr) {
 				return this.interfaces[i]
 			}
@@ -120,8 +117,8 @@ class DeviceExtensions {
 	}
 
 	async getStringDescriptor(desc_index: number): Promise<string> {
-		var langid = 0x0409;
-		var length = 255;
+		const langid = 0x0409;
+		const length = 255;
 		const buf = await this.controlTransfer(
 			usb.LIBUSB_ENDPOINT_IN,
 			usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
@@ -130,7 +127,6 @@ class DeviceExtensions {
 			length);
 		return buf.toString('utf16le', 2);
 	}
-
 
 	async getBosDescriptor(): Promise<BosDescriptor> {
 
@@ -151,7 +147,7 @@ class DeviceExtensions {
 				0,
 				usb.LIBUSB_DT_BOS_SIZE);
 
-			var totalLength = buffer.readUInt16LE(2);
+			const totalLength = buffer.readUInt16LE(2);
 			buffer = await this.controlTransfer(
 				usb.LIBUSB_ENDPOINT_IN,
 				usb.LIBUSB_REQUEST_GET_DESCRIPTOR,
@@ -159,7 +155,7 @@ class DeviceExtensions {
 				0,
 				totalLength);
 
-			var descriptor = {
+			const descriptor = {
 				bLength: buffer.readUInt8(0),
 				bDescriptorType: buffer.readUInt8(1),
 				wTotalLength: buffer.readUInt16LE(2),
@@ -167,10 +163,10 @@ class DeviceExtensions {
 				capabilities: []
 			};
 
-			var i = usb.LIBUSB_DT_BOS_SIZE;
+			let i = usb.LIBUSB_DT_BOS_SIZE;
 			while (i < descriptor.wTotalLength) {
 				const bLength = buffer.readUInt8(i + 0);
-				var capability = {
+				const capability = {
 					bLength,
 					bDescriptorType: buffer.readUInt8(i + 1),
 					bDevCapabilityType: buffer.readUInt8(i + 2),
@@ -193,12 +189,12 @@ class DeviceExtensions {
 	}
 
 	async getCapabilities(): Promise<Capability[]> {
-		var capabilities = [];
-		var self = this;
+		const capabilities = [];
+		const self = this;
 
 		const descriptor = await this.getBosDescriptor()
-		var len = descriptor ? descriptor.capabilities.length : 0
-		for (var i = 0; i < len; i++) {
+		const len = descriptor ? descriptor.capabilities.length : 0
+		for (let i = 0; i < len; i++) {
 			capabilities.push(new Capability(self, i))
 		}
 		return capabilities;
@@ -206,12 +202,12 @@ class DeviceExtensions {
 
 	async setConfiguration(desired: number): Promise<void> {
 		return new Promise((resolve, reject) => {
-			var self = this as any;
+			const self = this as any;
 			self.__setConfiguration(desired, function (err) {
 				if (err) return reject(err);
 				this.interfaces = []
-				var len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
-				for (var i = 0; i < len; i++) {
+				const len = this.configDescriptor ? this.configDescriptor.interfaces.length : 0
+				for (let i = 0; i < len; i++) {
 					this.interfaces[i] = new Interface(this, i)
 				}
 				resolve(null)
@@ -229,10 +225,9 @@ class DeviceExtensions {
 		})
 	}
 
-
 	async controlTransfer(bmRequestType: number, bRequest: number, wValue: number, wIndex: number, data_or_length: number | Buffer): Promise<Buffer | undefined> {
-		var isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
-		var wLength: number
+		const isIn = !!(bmRequestType & usb.LIBUSB_ENDPOINT_IN)
+		let wLength: number
 
 		if (isIn) {
 			if (!(data_or_length >= 0)) {
@@ -248,7 +243,7 @@ class DeviceExtensions {
 
 		// Buffer for the setup packet
 		// http://libusbx.sourceforge.net/api-1.0/structlibusb__control__setup.html
-		var buf = Buffer.alloc(wLength + SETUP_SIZE)
+		const buf = Buffer.alloc(wLength + SETUP_SIZE)
 		buf.writeUInt8(bmRequestType, 0)
 		buf.writeUInt8(bRequest, 1)
 		buf.writeUInt16LE(wValue, 2)
@@ -260,7 +255,7 @@ class DeviceExtensions {
 		}
 
 		return new Promise((resolve, reject) => {
-			var transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
+			const transfer = new usb.Transfer(this, 0, usb.LIBUSB_TRANSFER_TYPE_CONTROL, this.timeout,
 				(error, buf, actual) => {
 					if (error) return reject(error);
 
@@ -289,9 +284,28 @@ Object.getOwnPropertyNames(DeviceExtensions.prototype).filter(key => key !== 'co
 	}
 });
 
-usb.Device.prototype.timeout = 1000;
+/**
+ * Return a list of `Device` objects for the USB devices attached to the system.
+ */
+ export function getDeviceList(): Device[] {
+	return usb.getDeviceList();
+}
 
-var SETUP_SIZE = usb.LIBUSB_CONTROL_SETUP_SIZE
+function isBuffer(obj: any) {
+	return obj && obj instanceof Uint8Array
+}
+
+// convenience method for finding a device by vendor and product id
+export function findByIds(vid, pid) {
+	const devices = usb.getDeviceList()
+
+	for (let i = 0; i < devices.length; i++) {
+		const deviceDesc = devices[i].deviceDescriptor
+		if ((deviceDesc.idVendor == vid) && (deviceDesc.idProduct == pid)) {
+			return devices[i]
+		}
+	}
+}
 
 class Interface implements InterfaceType {
 	device: Device;
@@ -311,10 +325,10 @@ class Interface implements InterfaceType {
 		this.descriptor = this.device.configDescriptor.interfaces[this.id][this.altSetting]
 		this.interfaceNumber = this.descriptor.bInterfaceNumber
 		this.endpoints = []
-		var len = this.descriptor.endpoints.length
-		for (var i = 0; i < len; i++) {
-			var desc = this.descriptor.endpoints[i]
-			var c = (desc.bEndpointAddress & usb.LIBUSB_ENDPOINT_IN) ? InEndpoint : OutEndpoint
+		const len = this.descriptor.endpoints.length
+		for (let i = 0; i < len; i++) {
+			const desc = this.descriptor.endpoints[i]
+			const c = (desc.bEndpointAddress & usb.LIBUSB_ENDPOINT_IN) ? InEndpoint : OutEndpoint
 			this.endpoints[i] = new c(this.device, desc)
 		}
 	}
@@ -325,12 +339,12 @@ class Interface implements InterfaceType {
 
 	async release(closeEndpoints?: boolean): Promise<void> {
 		return new Promise((resolve, reject) => {
-			var self = this;
+			const self = this;
 
 			if (!closeEndpoints || this.endpoints.length == 0) {
 				next();
 			} else {
-				var n = self.endpoints.length;
+				let n = self.endpoints.length;
 				self.endpoints.forEach(function (ep, _i) {
 					if (ep.pollActive) {
 						ep.once('end', function () {
@@ -369,7 +383,7 @@ class Interface implements InterfaceType {
 
 	async setAltSetting(altSetting): Promise<void> {
 		return new Promise((resolve, reject) => {
-			var self = this;
+			const self = this;
 			(this.device as any).__setInterface(this.id, altSetting, function (err) {
 				if (err) return reject(err);
 				self.altSetting = altSetting;
@@ -380,14 +394,13 @@ class Interface implements InterfaceType {
 	}
 
 	endpoint(addr: number) {
-		for (var i = 0; i < this.endpoints.length; i++) {
+		for (let i = 0; i < this.endpoints.length; i++) {
 			if (this.endpoints[i].address == addr) {
 				return this.endpoints[i]
 			}
 		}
 	}
 }
-
 
 class Capability {
 	device: Device;
@@ -447,8 +460,8 @@ class Endpoint extends EventEmitter implements EndpointType {
 		this.pollActive = true
 		this.pollPending = 0
 
-		var transfers = []
-		for (var i = 0; i < nTransfers; i++) {
+		const transfers = []
+		for (let i = 0; i < nTransfers; i++) {
 			transfers[i] = this.makeTransfer(0, callback)
 		}
 		return transfers;
@@ -458,7 +471,7 @@ class Endpoint extends EventEmitter implements EndpointType {
 		if (!this.pollTransfers) {
 			throw new Error('Polling is not active.');
 		}
-		for (var i = 0; i < this.pollTransfers.length; i++) {
+		for (let i = 0; i < this.pollTransfers.length; i++) {
 			try {
 				this.pollTransfers[i].cancel()
 			} catch (err) {
@@ -479,7 +492,7 @@ class InEndpoint extends Endpoint implements InEndpointType {
 
 
 	async transfer(length: number): Promise<Buffer> {
-		var buffer = Buffer.alloc(length)
+		const buffer = Buffer.alloc(length)
 
 		return new Promise((resolve, reject) => {
 			this.makeTransfer(this.timeout, (error: any, _buf: any, actual: number) => {
@@ -490,7 +503,7 @@ class InEndpoint extends Endpoint implements InEndpointType {
 	}
 
 	startPoll(nTransfers?: number, transferSize?: number) {
-		var self = this
+		const self = this
 		this.pollTransfers = this.startPollInternal(nTransfers, transferSize, transferDone)
 
 		function transferDone(error, buf, actual) {
@@ -559,18 +572,3 @@ class OutEndpoint extends Endpoint implements OutEndpointType {
 		}
 	}
 }
-
-var hotplugListeners = 0;
-usb.on('newListener', function (name) {
-	if (name !== 'attach' && name !== 'detach') return;
-	if (++hotplugListeners === 1) {
-		usb._enableHotplugEvents();
-	}
-});
-
-usb.on('removeListener', function (name) {
-	if (name !== 'attach' && name !== 'detach') return;
-	if (--hotplugListeners === 0) {
-		usb._disableHotplugEvents();
-	}
-});
