@@ -225,7 +225,6 @@ class DeviceExtensions {
 		return capabilities;
 	}
 
-
 	setConfiguration(desired: number): Promise<void> {
 		return new Promise((resolve, reject) => {
 			var self = this as any;
@@ -239,6 +238,16 @@ class DeviceExtensions {
 				resolve(null)
 			});
 		});
+	}
+	
+	reset(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const self = this as any;
+			self.__reset(function (err) {
+				if (err) return reject(err);
+				resolve(null)
+			});
+		})
 	}
 }
 

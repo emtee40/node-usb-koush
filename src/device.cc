@@ -384,7 +384,7 @@ Napi::Object Device::Init(Napi::Env env, Napi::Object exports) {
 			Device::InstanceMethod("__open", &Device::Open),
 			Device::InstanceMethod("__close", &Device::Close),
 			Device::InstanceMethod("__clearHalt", &Device::ClearHalt),
-			Device::InstanceMethod("reset", &Device::Reset),
+			Device::InstanceMethod("__reset", &Device::Reset),
 			Device::InstanceMethod("__claimInterface", &Device::ClaimInterface),
 			Device::InstanceMethod("__releaseInterface", &Device::ReleaseInterface),
 			Device::InstanceMethod("__setInterface", &Device::SetInterface),

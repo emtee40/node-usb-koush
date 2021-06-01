@@ -84,7 +84,6 @@ export interface Device {
      *
      * The device must be open to use this method.
      * @param desc_index
-     * @param callback
      */
      getStringDescriptor(desc_index: number): Promise<string>;
   
@@ -92,7 +91,6 @@ export interface Device {
      * Perform a control transfer to retrieve an object with properties for the fields of the Binary Object Store descriptor.
      *
      * The device must be open to use this method.
-     * @param callback
      */
     getBosDescriptor(): Promise<BosDescriptor>;
   
@@ -100,7 +98,6 @@ export interface Device {
      * Retrieve a list of Capability objects for the Binary Object Store capabilities of the device.
      *
      * The device must be open to use this method.
-     * @param callback
      */
     getCapabilities(): Promise<Capability[]>;
   
@@ -110,7 +107,6 @@ export interface Device {
      *
      * The device must be open to use this method.
      * @param desired
-     * @param callback
      */
     setConfiguration(desired: number): Promise<void>;
   
@@ -120,7 +116,7 @@ export interface Device {
      * The device must be open to use this method.
      * @param callback
      */
-    reset(callback: (error: undefined | LibUSBException) => void): void;
+    reset(): Promise<void>;
   }
   
   /** A structure representing the standard USB device descriptor */
@@ -268,7 +264,7 @@ export interface Device {
     claim(): void;
   
     /**
-     * Releases the interface and resets the alternate setting. Calls callback when complete.
+     * Releases the interface and resets the alternate setting.
      *
      * It is an error to release an interface with pending transfers. If the optional closeEndpoints
      * parameter is true, any active endpoint streams are stopped (see `Endpoint.stopStream`),
@@ -277,7 +273,6 @@ export interface Device {
      *
      * The device must be open to use this method.
      * @param closeEndpoints
-     * @param callback
      */
     release(closeEndpoints?: boolean): Promise<void>;
   
@@ -307,7 +302,6 @@ export interface Device {
      *
      * The device must be open to use this method.
      * @param altSetting
-     * @param callback
      */
     setAltSetting(altSetting: number): Promise<void>;
   
