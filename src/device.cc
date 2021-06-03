@@ -161,10 +161,16 @@ Napi::Value Device::GetAllConfigDescriptors(const Napi::CallbackInfo& info){
 	ENTER_METHOD(Device, 0);
 	libusb_config_descriptor * cdesc;
 	struct libusb_device_descriptor dd;
-	libusb_get_device_descriptor(self->device, &dd);
+	if (libusb_get_device_descriptor(self->device, &dd) != 0) {
+		THROW_ERROR("Error getting device descriptor.");
+		return env.Undefined();
+	}
 	Napi::Array v8cdescriptors = Napi::Array::New(env, dd.bNumConfigurations);
 	for(uint8_t i = 0; i < dd.bNumConfigurations; i++){
-		libusb_get_config_descriptor(device, i, &cdesc);
+		int result = libusb_get_config_descriptor(device, i, &cdesc);
+		if (result != 0) {
+			continue;
+		}
 		v8cdescriptors.Set(i, Device::cdesc2V8(env, cdesc));
 		libusb_free_config_descriptor(cdesc);
 	}
