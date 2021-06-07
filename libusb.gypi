@@ -63,6 +63,7 @@
             'libusb/libusb/os/linux_usbfs.h',
           ],
           'defines': [
+            'HAVE_CLOCK_GETTIME=1',
             'OS_LINUX=1',
             '_GNU_SOURCE=1',
             'USBI_TIMERFD_AVAILABLE=1',
