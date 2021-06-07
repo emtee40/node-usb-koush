@@ -40,12 +40,14 @@
       'conditions': [
         [ 'OS == "linux" or OS == "android" or OS == "mac"', {
           'sources': [
-            'libusb/libusb/os/poll_posix.c',
-            'libusb/libusb/os/poll_posix.h',
+            'libusb/libusb/os/events_posix.c',
+            'libusb/libusb/os/events_posix.h',
             'libusb/libusb/os/threads_posix.c',
             'libusb/libusb/os/threads_posix.h',
           ],
           'defines': [
+            'PLATFORM_POSIX=1',
+            'PRINTF_FORMAT(a, b)=__attribute__ ((__format__ (__printf__, a, b)))',
             'DEFAULT_VISIBILITY=',
             'HAVE_GETTIMEOFDAY=1',
             'HAVE_POLL_H=1',
