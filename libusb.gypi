@@ -40,8 +40,8 @@
       'conditions': [
         [ 'OS == "linux" or OS == "android" or OS == "mac"', {
           'sources': [
-            'libusb/libusb/os/events_posix.c',
-            'libusb/libusb/os/events_posix.h',
+            'libusb/libusb/os/poll_posix.c',
+            'libusb/libusb/os/poll_posix.h',
             'libusb/libusb/os/threads_posix.c',
             'libusb/libusb/os/threads_posix.h',
           ],
@@ -109,8 +109,8 @@
         }],
         [ 'OS == "win"', {
           'sources': [
-            'libusb/libusb/os/events_windows.c',
-            'libusb/libusb/os/events_windows.h',
+            'libusb/libusb/os/poll_windows.c',
+            'libusb/libusb/os/poll_windows.h',
             'libusb/libusb/os/threads_windows.c',
             'libusb/libusb/os/threads_windows.h',
             'libusb/libusb/os/windows_common.c',
