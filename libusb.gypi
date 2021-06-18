@@ -113,7 +113,7 @@
             'libusb/libusb/os/poll_windows.h',
             'libusb/libusb/os/threads_windows.c',
             'libusb/libusb/os/threads_windows.h',
-            'libusb/libusb/os/windows_common.c',
+            'libusb/libusb/os/windows_nt_common.c',
             'libusb/libusb/os/windows_common.h',
             'libusb/libusb/os/windows_winusb.c',
             'libusb/libusb/os/windows_usbdk.c',
